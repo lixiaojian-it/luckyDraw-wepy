@@ -1,7 +1,7 @@
 
 ### 介绍
 
-WePY九宫小案例：(https://github.com/aben1188/awesome-wepy)
+WePY九宫小案例：(https://github.com/xiaojian321/luckyDraw-wepy)
 
 #### 安装依赖
 
