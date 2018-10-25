@@ -1,0 +1,755 @@
+<template>
+  <view class="luck-draw-page">
+    <view class="turntable-bg">
+      <view class="turntable-info">
+        <view class="turntable">
+          <view class="inner">
+            <view class="content-out" 
+              wx:for="{{prizeData}}" 
+              wx:key="index" 
+              style="top:{{item.top}}rpx;left:{{item.left}}rpx; background-color: {{(luckDrawPosition==index)?colorAwardSelect:colorAwardDefault}};" >  
+              <text>{{item.topAward}}</text>
+              <text>{{item.leftAward}}</text>
+              <image class="award-image img{{index}}" src="{{item.img}}"></image>
+              <text class="award-text">{{item.text}}</text>
+              <image class="decorate" src="http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_decorate1.png"></image>
+            </view>
+            <view class="start-btn" wx:if="{{!isRunning}}" @tap="startGame">立即抽奖</view>
+            <view class="start-btn" wx:if="{{isRunning}}" >立即抽奖</view>
+          </view>
+        </view>
+        <view class="detail">
+          <view class="chance">
+            您有 <text>{{luckDrawCount}}</text> 次抽奖机会
+          </view>
+          <view @tap="openRule" class="rule">活动规则</view>
+        </view>
+      </view>
+    </view>  
+  </view>  
+
+    <!-- 首页添加遮罩层-用于用户转发提示 -->
+  <view class="shading" wx:if="{{showLuckDrawPopup}}">
+    <view class="close" @tap="closePopup">
+      <image class="close-share" src="http://a.mysodao.com/project/smallroutine/images/icon/close-fenxiang.png"></image> 
+    </view>
+      <!-- 任务奖励 -->
+    <view class="task-reward" wx:if="{{luckDrawStatus === 6}}">
+      <view class="heading-img">
+        <image src="http://a.mysodao.com/project/smallroutine/images/icon/luck_jiang3.png" />
+      </view>
+      <view class="task-list">
+        <view class="task-prompt">完成以下任务即可获得 <text>￥{{taskPrice}}元</text> 现金奖励</view>
+        <view class="item" wx:for="{{taskList}}" wx:key="index">
+          <view class="item-info"> 
+            <view class="item-details">
+              <view class="task-img">
+                <image src="{{item.mainimg}}" />
+              </view>
+              <view class="task-progress">
+                <view class="problem">
+                  <text>{{item.title}}</text>
+                </view>
+                <view class="reward">
+                  <text>任务奖励：</text>
+                  <text class="count">￥{{(item.basicjifen+item.extrajifen)/1000}}</text>
+                  <text>元</text>
+                </view>
+                <view class="surplus">
+                  <text>剩余：</text> 
+                  <text class="count">{{item.remainderdailycount}} </text>
+                  <text>份</text>
+                  <text class="complate">完成：</text> 
+                  <text class="count">{{item.allcount-item.remainderdailycount}} </text>
+                  <text>人</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view class="receive-btn" @tap="receiveBtn">
+        <image src="http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_receive3.png" />
+      </view>
+    </view>
+
+    <!-- 现金红包-->
+    <view class="cash income" wx:if="{{luckDrawStatus === 0}}">
+      <view class="title">
+        <image class="close-share" src="http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_title3.png"></image> 
+      </view>
+      <view class="packet">
+        <view class="text1">恭喜您</view>
+        <view class="text">获得一个现金红包</view>
+        <view class="money">￥ {{redPackagePrice}} 元</view>
+      </view>
+      <view class="open" @tap="openMoneyBg">去我的钱包看看 </view>
+    </view>
+ 
+    <!-- 必中劵-->
+    <view class="must-be income" wx:if="{{luckDrawStatus === 1}}">
+      <view class="title">
+        <image class="close-share" src="http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_title3.png"></image> 
+      </view>
+      <view class="packet">
+        <view class="text1">恭喜您</view>
+        <view class="text">获得一张价值 {{mustBePrice}} 元的</view>
+        <view class="text">必过劵</view>
+      </view>
+      <view class="open" @tap="openMustBe">查看必过券规则</view>
+    </view>
+
+    <!-- 活动规则 -->
+    <view class="task-reward" wx:if="{{isShowRule}}">
+      <view class="heading-img">
+        <image src="http://a.mysodao.com/project/smallroutine/images/icon/luck_activity_rule1.png" />
+      </view>
+      <view class="task-list">
+        <view class="task-prompt relu"></view>
+        <view class="item relu-item" wx:for="{{luckDrawRule}}"  wx:key="index">{{item.desc}}</view>
+      </view>
+      <view class="receive-btn" @tap="reluBtn">
+        <image src="http://a.mysodao.com/project/smallroutine/images/icon/luck_i_do1.png" />
+      </view>
+    </view>
+
+  </view>
+</template>
+
+<script>
+import wepy from 'wepy';
+
+export default class luckDraw extends wepy.page {
+  config = {
+    navigationBarTitleText: '抽奖动画'
+  };
+  components = {
+  };
+  data = {
+    colorAwardDefault: '#fff1de', //奖品默认颜色
+    colorAwardSelect: '#fecc44', //奖品选中颜色
+    isRunning: false, //是否正在抽奖
+    showLuckDrawPopup: false, //- 遮罩层
+    timer: null, //- 定时器
+    times: 0, //- 转动的次数
+    speed: 20, //- 转动的速度
+    cycle: 40, //- 转动基本次数，至少要转动的次数
+    count: 0, // 总共的位置
+    luckDrawStatus: -1, //- 奖品状态
+    luckDrawPosition: -1, //- 中奖的位置
+
+    redPackagePrice: 0,  //- 红包
+    mustBePrice: 0,  //- 必中劵
+    taskPrice: '',
+    luckDrawCount: 0, //- 抽奖次数
+    userLoginStatus: '', //- 获取用户登录状态
+    whetherData: false,
+    luckDrawPromptImg: '', //- 配置图片
+    luckDrawRule: '',  //- 抽奖规则
+    isShowRule: false,
+    goodlist: [],  //- 好货精选列表
+   
+   
+    prizeData: [  //- 抽奖转盘数据
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_cash_bag1.png',
+        text: '现金红包',
+        top: 20,
+        left: 20
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_volume1.png',
+        text: '必过劵',
+        top: 20,
+        left: 226
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_iphone1.png',
+        text: 'iPhoneX',
+        top: 20,
+        left: 432
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_thank2.png',
+        text: '谢谢参与',
+        top: 226,
+        left: 432
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_volume1.png',
+        text: '必过劵',
+        top: 432,
+        left: 432
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_come_on1.png',
+        text: '继续加油',
+        top: 432,
+        left: 226
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_reward1.png',
+        text: '任务奖励',
+        top: 432,
+        left: 20
+      },
+      {
+        img:
+          'http://a.mysodao.com/project/smallroutine/images/icon/luck_come_again1.png',
+        text: '再来一次',
+        top: 226,
+        left: 20
+      }
+    ],
+    taskList: [], //- 任务奖励列表
+    taskListTest: [
+      {
+        allcount: 635,
+        basicjifen: 150,
+        completeCount: 630,
+        extrajifen: 0,
+        flowsourcetype: 2,
+        mainimg:
+          'http://imgcache.mysodao.com/img3/M02/E7/E9/CgAPEFtBx3mVzwneAAD4vNPjioo569_300x300x1.JPG',
+        pid: 20080856,
+        platform: 0,
+        remainderdailycount: 5,
+        status: 1,
+        title: '请问红框中打马赛克的文字是什么？'
+      },
+      {
+        allcount: 635,
+        basicjifen: 150,
+        completeCount: 630,
+        extrajifen: 0,
+        flowsourcetype: 2,
+        mainimg:
+          'http://imgcache.mysodao.com/img3/M02/E7/E9/CgAPEFtBx3mVzwneAAD4vNPjioo569_300x300x1.JPG',
+        pid: 20080856,
+        platform: 0,
+        remainderdailycount: 5,
+        status: 1,
+        title: '请问红框中打马赛克的文字是什么？'
+      },
+      {
+        allcount: 635,
+        basicjifen: 150,
+        completeCount: 630,
+        extrajifen: 0,
+        flowsourcetype: 2,
+        mainimg:
+          'http://imgcache.mysodao.com/img3/M02/E7/E9/CgAPEFtBx3mVzwneAAD4vNPjioo569_300x300x1.JPG',
+        pid: 20080856,
+        platform: 0,
+        remainderdailycount: 5,
+        status: 1,
+        title: '请问红框中打马赛克的文字是什么？'
+      }
+    ]
+  };
+  methods = {
+    //- 查看规则
+    openRule() {
+      this.showLuckDrawPopup = true;
+      this.isShowRule = true;
+    },
+
+    //- 点击规则（我知道按钮-关闭弹窗）
+    reluBtn() {
+      this.showLuckDrawPopup = false;
+      //- 隐藏活动规程弹窗
+      this.isShowRule = false; 
+    },
+
+    //- 关闭弹窗
+    closePopup() {
+      this.showLuckDrawPopup = false;
+      //- 隐藏活动规程弹窗
+      this.isShowRule = false
+      this.luckDrawStatus = -1;
+      // this.luckDrawPosition = -1;
+    },
+
+    //开始抽奖
+    startGame() {
+      this.isRunning = true;
+      this.roll(); //- 动画 
+    }
+  };
+  
+  //- 走马灯
+  prizeIndex() {
+    this.luckDrawPosition++;
+    if (this.luckDrawPosition >= 8) {
+      this.luckDrawPosition = 0;
+    }
+    this.$apply();
+  }
+
+  //- 抽奖动画
+  roll() {
+    let self = this;
+    //- 获取转动的索引值
+    self.prizeIndex();
+    //- 禁用立即抽奖按钮
+    
+    //- 转动的次数
+    self.times += 1;
+    //- 转动的次数大于基本转动的次数   奖品和中奖重合
+    if (
+      self.times > self.cycle &&
+      self.luckDrawStatus == self.luckDrawPosition
+    ) {
+      //- 清除定时器
+      clearTimeout(self.timer);
+      //- 初始化数据
+      self.times = 0;
+      self.isRunning = false;
+      self.luckDrawPosition = -1; //- 初始化中奖位置
+      self.speed = 20;
+      if (self.luckDrawStatus === 0 || self.luckDrawStatus === 1 || self.luckDrawStatus === 6) {
+        self.showLuckDrawPopup = true;
+      }
+      self.$apply();
+      return false;
+    } else {
+      //- 如果转动的次数小于基本转动的次数
+      if (self.times < self.cycle) {
+        //- 加速度
+        self.speed -= 50;
+      } else if (self.times == self.cycle) {
+        self.luckDrawStatus = Math.floor(Math.random()*8);
+      } else {
+        if(self.luckDrawStatus == 1) {
+           self.speed += 200;
+        }else {
+           self.speed += 40;
+        }
+      }
+      if (self.speed < 40) {
+        self.speed = 40;
+      }
+      self.timer = setTimeout(() => {
+        self.roll();
+      }, self.speed);
+    }
+  }
+}
+</script>
+<style lang="less">
+.luck-draw-page {
+  height: 100%;
+  width: 100%;
+  .turntable-bg {
+    height: 1205rpx;
+    width: 100%;
+    background: url('http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_bg1.jpg')
+      no-repeat;
+    background-size: 100% 100%;
+    // background-position: center -40rpx;
+    position: relative;
+    .turntable-info {
+      position: absolute;
+      top: 390rpx;
+      left: 50%;
+      margin-left: -325rpx;
+    }
+    .turntable {
+      height: 628rpx;
+      width: 628rpx;
+      background-color: #fdcf17;
+      padding: 10rpx;
+      border-radius: 30rpx;
+      box-shadow: 0px 0px 20px #fff;
+      .inner {
+        height: 628rpx;
+        width: 628rpx;
+        background-color: #e65200;
+        border-radius: 30rpx;
+        box-shadow: 0px 0px 2px #e65200;
+        .content-out {
+          position: absolute;
+          height: 196rpx;
+          width: 196rpx;
+          background-color: #fff1de;
+          border-radius: 20rpx;
+          box-shadow: 0px 0px 5px red;
+          .award-image {
+            position: absolute;
+            margin: auto;
+            top: 0;
+            left: 0;
+            bottom: 20rpx;
+            right: 0;
+            height: 140rpx;
+            width: 130rpx;
+          }
+          .award-text {
+            color: #f62f5e;
+            font-size: 13px;
+            position: absolute;
+            left: 0;
+            bottom: 20rpx;
+            width: 100%;
+            text-align: center;
+          }
+          .decorate {
+            height: 12rpx;
+            width: 80rpx;
+            position: absolute;
+            top: 12rpx;
+            left: 30rpx;
+          }
+          .img0 {
+            height: 80rpx;
+            width: 60rpx;
+          }
+          .img1 {
+            height: 70rpx;
+            width: 120rpx;
+          }
+          .img2 {
+            height: 90rpx;
+            width: 70rpx;
+          }
+          .img3 {
+            height: 125rpx;
+            width: 125rpx;
+          }
+          .img4 {
+            height: 70rpx;
+            width: 120rpx;
+          }
+          .img5 {
+            height: 80rpx;
+            width: 80rpx;
+          }
+          .img6 {
+            height: 50rpx;
+            width: 100rpx;
+          }
+          .img7 {
+            height: 65rpx;
+            width: 130rpx;
+          }
+        }
+        .start-btn {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          margin-left: -98rpx;
+          margin-top: -130rpx;
+          border-radius: 15rpx;
+          height: 196rpx;
+          width: 196rpx;
+          background: url('http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_btn_bg1.png')
+            no-repeat;
+          background-size: 100% 100%;
+          color: #f6251e;
+          text-align: center;
+          font-size: 20px;
+          font-weight: bolder;
+          line-height: 196rpx;
+        }
+      }
+    }
+    .detail {
+      display: flex;
+      justify-content: center;
+      margin-top: 25rpx;
+      color: #fff;
+      font-size: 13px;
+      position: relative;
+      text {
+        color: #ffcc00;
+        font-size: 13px;
+      }
+      .rule {
+        float: right;
+        position: absolute;
+        right: 0rpx;
+        color: #ffcc00;
+        border-bottom: 2px solid #ffcc00;
+      }
+    }
+  }
+  .choice-list {
+    background: #ba0a65;
+    padding-bottom: 120rpx;
+    margin-top:-50rpx;
+    .prompt {
+      height: 150rpx;
+      width: 720rpx;
+      margin: 0 auto;
+      image {
+        height: 100%;
+        width: 100%;
+      }
+    }
+    .nodata {
+      font-size: 16px;
+      color: #fff;
+      text-align: center;
+      width: 100%;
+    }
+    .title {
+      height: 54rpx;
+      width: 505rpx;
+      margin: 0 auto;
+      margin-top: 50rpx;
+      image {
+        height: 100%;
+        width: 100%;
+      }
+    }
+  }
+
+  .activity-list {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 40rpx 15rpx 0rpx;
+    .item {
+      width: 50%;
+      .item-info {
+        padding: 15rpx 10rpx;
+      }
+      .info {
+        padding: 25rpx 20rpx 35rpx;
+        background: #fff;
+        border-radius: 20rpx;
+      }
+      .goodimg {
+        width: 100%;
+        height: 330rpx;
+        font-size: 0;
+        image {
+          width: 100%;
+          height: 330rpx;
+        }
+      }
+      .good-name {
+        font-size: 13px;
+        margin-top: 20rpx;
+        overflow: hidden;
+        color: #333;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .price {
+        height: 56rpx;
+        line-height: 56rpx;
+        margin-top: 20rpx;
+        font-size: 12px;
+      }
+      .delprice {
+        color: #f62f5e;
+        text-decoration: line-through;
+        font-size: 16px;
+      }
+      .try_btn {
+        display: inline-block;
+        width: 160rpx;
+        height: 56rpx;
+        background-color: #f62f5e;
+        color: #fff;
+        text-align: center;
+        border-radius: 56rpx;
+        float: right;
+      }
+    }
+  }
+}
+//- 遮罩层
+.shading {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  .close {
+    height: 85rpx;
+    width: 85rpx;
+    position: absolute;
+    top: 20rpx;
+    right: 20rpx;
+    image {
+      height: 100%;
+      width: 100%;
+    }
+  }
+
+  //- 任务奖励
+  .task-reward {
+    height: 1020rpx;
+    width: 580rpx;
+    padding: 10rpx;
+    background: #bd10e0;
+    border-radius: 40rpx;
+    position: relative;
+    margin-top: 115rpx;
+    .heading-img {
+      position: absolute;
+      height: 116rpx;
+      width: 328rpx;
+      left: 50%;
+      margin-left: -164rpx;
+      top: -50rpx;
+
+      image {
+        height: 100%;
+        width: 100%;
+      }
+    }
+    .receive-btn {
+      position: absolute;
+      height: 75rpx;
+      width: 248rpx;
+      left: 50%;
+      margin-left: -124rpx;
+      bottom: 40rpx;
+      image {
+        height: 100%;
+        width: 100%;
+      }
+    }
+    .task-list {
+      height: 100%;
+      width: 100%;
+      background: #f8d6ff;
+      border-radius: 36rpx;
+      box-shadow: 0px 5px 2px -2px #f7dd9f inset;
+      .task-prompt {
+        color: #bd10e0;
+        font-size: 13px;
+        text-align: center;
+        padding-top: 95rpx;
+        text {
+          font-size: 18px;
+        }
+      }
+      .relu {
+        padding-top: 90rpx;
+      }
+      .item {
+        padding: 20rpx 14rpx 0rpx;
+        font-size: 13px;
+        color: #333;
+
+        .item-info {
+          padding: 25rpx 10rpx 30rpx 35rpx;
+          background: #f9ecfc;
+          border: 2px solid #eee3f1;
+          .item-details {
+            display: flex;
+            .task-img {
+              height: 160rpx;
+              width: 160rpx;
+              flex-shrink: 0;
+              image {
+                height: 100%;
+                width: 100%;
+              }
+            }
+            .task-progress {
+              margin-left: 20rpx;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              .count {
+                color: #f62f5e;
+              }
+              .complate {
+                margin-left: 20rpx;
+              }
+              .problem {
+                display: flex;
+                align-items: center;
+                image {
+                  height: 30rpx;
+                  width: 30rpx;
+                  vertical-align: middle;
+                  margin-right: 10rpx;
+                }
+              }
+            }
+          }
+        }
+      }
+      .relu-item {
+        padding: 20rpx 35rpx;
+      }
+    }
+  }
+
+  //- 现金红包
+  .income {
+    .title {
+      height: 60rpx;
+      width: 180rpx;
+      margin: 90rpx auto 70rpx;
+      image {
+        height: 100%;
+        width: 100%;
+      }
+    }
+    .packet {
+      height: 660rpx;
+      width: 515rpx;
+      background: url('http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_open_bag1.png')
+        no-repeat;
+      background-size: 100% auto;
+      color: #feffff;
+      font-size: 18px;
+      text-align: center;
+      .text1 {
+        padding-top: 75rpx;
+      }
+      .text {
+        margin-top: 10rpx;
+      }
+
+      .money {
+        color: #fff;
+        font-size: 36px;
+        margin-top: 20rpx;
+      }
+    }
+    .open {
+      width: 340rpx;
+      height: 90rpx;
+      background: #c71b00;
+      line-height: 90rpx;
+      text-align: center;
+      color: #feffff;
+      font-size: 18px;
+      border-radius: 20rpx;
+      margin: 30rpx auto 0rpx;
+    }
+  }
+
+  //- 必过劵
+  .must-be {
+    .packet {
+      background: url('http://a.mysodao.com/project/smallroutine/images/icon/luck_draw_open_volume1.png')
+        no-repeat;
+      background-size: 100% auto;
+      .text1 {
+        padding-top: 55rpx;
+      }
+    }
+  }
+}
+</style>
